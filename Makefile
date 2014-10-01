@@ -1,4 +1,4 @@
-all: proja
+make: proja
 
 proja: proja.o 
 	g++ -o proja proja.o -g
