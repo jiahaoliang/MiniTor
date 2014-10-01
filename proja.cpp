@@ -26,6 +26,8 @@ int readConfig (char* filename, int *p_stage, int *p_num_routers){
     std::ifstream infile(filename);
     char buf[64];
     char *field=buf, *val=buf;
+    if (!infile.is_open()) return 1;
+
     while(infile.getline(buf,64,'\n')){
         if (buf[0] == '#') continue;	//ignore # comment
         else{
@@ -50,7 +52,7 @@ int createSocket(int ai_socktype, const char* port, int* p_sockfd, in_port_t* p_
 	int rv;
 	struct sockaddr_in sa;	//store local address
 	unsigned int sa_len = sizeof(sa);
-	char buf[64];
+//	char buf[64];
 
 
 	memset(&hints, 0, sizeof hints);
@@ -89,7 +91,7 @@ int createSocket(int ai_socktype, const char* port, int* p_sockfd, in_port_t* p_
     return 0;
 }
 int main(int argc, char **argv) {
-    std::cout << "!!!Hello World!!!" << std::endl; // prints !!!Hello World!!!
+    std::cout << "Start...." << std::endl; // prints !!!Hello World!!!
     int stage = 0,num_routers = 0;
     int sockfd = 0, cpid = 0;
     in_port_t port_num_proxy = 0, port_num_router = 0;

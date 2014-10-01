@@ -7,4 +7,4 @@ proja.o: proja.cpp
 	g++ -g -c -Wall proja.cpp
 
 clean:
-	rm -f *.o proja
+	rm -f *.o proja *.out

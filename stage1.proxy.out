@@ -1,2 +1,2 @@
-proxy port: 24542
-router 1, pid: 17114, port: 49359
+proxy port: 10149
+router 1, pid: 2785, port: 42126
