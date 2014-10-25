@@ -25,7 +25,6 @@
 *
 */
 
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -37,6 +36,7 @@
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <unistd.h>
+
 
 /**************************************************************************
  * tun_alloc: allocates or reconnects to a tun/tap device. 
@@ -77,14 +77,13 @@ int tun_alloc(char *dev, int flags)
 }
 
 
-int tunnel_reader()
+int tunnel_reader(int tun_fd, char* buffer)
 {
-    char tun_name[IFNAMSIZ];
-    char buffer[2048];
+//    char tun_name[IFNAMSIZ];
 
-    /* Connect to the tunnel interface (make sure you create the tunnel interface first) */
-    strcpy(tun_name, "tun1");
-    int tun_fd = tun_alloc(tun_name, IFF_TUN | IFF_NO_PI); 
+//    /* Connect to the tunnel interface (make sure you create the tunnel interface first) */
+//    strcpy(tun_name, "tun1");
+//    int tun_fd = tun_alloc(tun_name, IFF_TUN | IFF_NO_PI);
 
     if(tun_fd < 0)
     {
@@ -103,10 +102,10 @@ int tunnel_reader()
      * You will also probably want to do other setup in the
      * main() routine.
      */
-    while(1) 
-    {
+//    while(1)
+//    {
 	/* Now read data coming from the tunnel */
-        int nread = read(tun_fd,buffer,sizeof(buffer));
+    int nread = read(tun_fd,buffer,2048);
 	if(nread < 0) 
 	{
 	    perror("Reading from tunnel interface");
@@ -126,13 +125,17 @@ int tunnel_reader()
 	     */
 	    
 	}
-    }
+
+	return nread;
+//    }
+
+
 }
 
-int main(int argc, char** argv)
-{
-	/*
-	 * For a real proja, you will want to do some setup here.
-	 */
-	tunnel_reader();
-}
+//int main(int argc, char** argv)
+//{
+//	/*
+//	 * For a real proja, you will want to do some setup here.
+//	 */
+//	tunnel_reader();
+//}
