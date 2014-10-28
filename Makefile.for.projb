@@ -1,13 +1,13 @@
 make: projb
 
 projb: proja.o sample_tunnel.o
-	g++ -o proja proja.o sample_tunnel.o -g
+	g++ -o projb proja.o sample_tunnel.o -g
 
-proja.o: proja.cpp sample_tunnel.h
+proja.o: proja.cpp proja.h sample_tunnel.h
 	g++ -g -c -Wall proja.cpp
 	
 sample_tunnel.o: sample_tunnel.h sample_tunnel.c
 	g++ -g -c -Wall sample_tunnel.c
 
 clean:
-	rm -f *.o projb *.out
+	rm -f *.o projb proja *.out
