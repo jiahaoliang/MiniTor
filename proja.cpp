@@ -292,8 +292,10 @@ int main(int argc, char **argv) {
     struct in_addr sourceIP_in_addr;	//the original source IP address of packets route to router
     struct sockaddr sa;
 	unsigned int sa_len = sizeof sa;
-	struct sockaddr sa_proxy;
+	struct sockaddr sa_proxy;			//socket address of proxy
 	unsigned int sa_proxy_len = sizeof sa_proxy;
+	struct sockaddr sa_router[MAXNUMROUTERS];			//socket address of routers
+	unsigned int sa_router_len[MAXNUMROUTERS];
 
     in_port_t port_num_proxy = 0, port_num_router = 0;
 
@@ -307,11 +309,22 @@ int main(int argc, char **argv) {
 
     char buf[MAXDATASIZE] = {0};
     int numbytes = 0;
+    int i = 0;
 
     if(readConfig(*(++argv), &stage, &num_routers)){
         perror("readConfig");
         exit(1);
     }
+
+    if(stage>4 || stage<1){
+    	fprintf(stderr,"unavailable stage: %d\n",stage);
+    	exit(1);
+    }
+
+    if(num_routers>6 || num_routers<1){
+		fprintf(stderr,"unavailable # of routers: %d\n",num_routers);
+		exit(1);
+	}
 
     if(createSocket(NULL, SOCK_DGRAM, "0", &sockfd, &port_num_proxy)){
         perror("createSocket");
@@ -333,59 +346,48 @@ int main(int argc, char **argv) {
 
 //STAGE1:
     std::ofstream outfile;
-    switch(stage){
-    case 1:
-    	outfile.open("stage1.proxy.out");
-    	break;
-    case 2:
-    	outfile.open("stage2.proxy.out");
-    	break;
-    case 3:
-    	outfile.open("stage3.proxy.out");
-    	break;
-    default:
-    	fprintf(stderr,"unavailable stage: %d\n",stage);
-    	exit(1);
-    }
 
+    //use buf[] denote the output filename
+    sprintf(buf,"stage%d.proxy.out", stage);
+    outfile.open(buf);
+    buf[0]='\0';	//erase the buf
 
 	outfile<<"proxy port: "<<port_num_proxy<<std::endl;
 
 	getsockname(sockfd, &sa_proxy, &sa_proxy_len);	//get proxy socket address, store at router(child) as globle variable
-    cpid = fork();
+
+	if(stage<4)
+		cpid = fork();
+    else{
+    	//stage 4, fork multiple routers
+    	for(i=0;i<num_routers;i++){
+    		cpid = fork();
+    		if(cpid) break;		//only the parent(proxy) do the forking..
+    		routerID++;
+    	}
+    }
     if(cpid){
     	//child process (router) here...
     	//stage 1 begins
     	outfile.close();
     	close(sockfd);
-
-    	switch(stage){
-        case 1:
-        	outfile.open("stage1.router1.out");
-        	break;
-        case 2:
-        	outfile.open("stage2.router1.out");
-        	break;
-        case 3:
-        	outfile.open("stage3.router1.out");
-        	break;
-        default:
-        	fprintf(stderr,"unavailable stage: %d\n",stage);
-        	exit(1);
-        }
+    	//use buf[] denote the output filename
+        sprintf(buf,"stage%d.router%d.out", stage, routerID);
+        outfile.open(buf);
+        buf[0]='\0';	//erase the buf
 
 		if(createSocket(NULL, SOCK_DGRAM, "0", &sockfd, &port_num_router)){
 			perror("createSocket");
 			exit(1);
 		}
-		std::cout<<"router 1, "<<"pid: "<<
+		std::cout<<"router "<<routerID<<", "<<"pid: "<<
 				cpid<<", "<< "port: "<<port_num_router<<std::endl;
 
-		outfile<<"router 1, "<<"pid: "<<
+		outfile<<"router "<<routerID<<", "<<"pid: "<<
 				cpid<<", "<< "port: "<<port_num_router<<std::endl;
 
 		//tell proxy this router is up
-		sprintf(buf, "I am up#%d#%d", cpid, port_num_router);
+		sprintf(buf, "I am up#%d#%d#%d", routerID, cpid, port_num_router);
 		if ((numbytes = sendto(sockfd, buf, strlen(buf), 0,
 				&sa_proxy, sa_proxy_len)) == -1) {
 			perror("talker: sendto");
@@ -455,7 +457,7 @@ int main(int argc, char **argv) {
 						struct icmphdr *icmp_header = (struct icmphdr *)(buf+20);
 						int typ = icmp_header->type;
 
-						cout<<"router 1 raw socket get: "<<", src: "<<inet_ntoa(sender_addr);
+						cout<<"router "<<routerID<<" raw socket get: "<<", src: "<<inet_ntoa(sender_addr);
 						cout<<", dst: "	<<inet_ntoa(dest_addr)
 								<<", ";
 						cout<<"type: "<< typ <<endl;
@@ -463,8 +465,8 @@ int main(int argc, char **argv) {
 						outfile<<"ICMP from raw sock"<<", src: "<<inet_ntoa(sender_addr);
 						outfile<<", dst: "	<<inet_ntoa(dest_addr)<<", ";
 						outfile<<"type: "<< typ <<endl;
-						//if the packet from the real world, send back to proxy
-						if(!isBelongSubnet(inet_ntoa(sender_addr), routerIP, 24)){
+						//if the packet from the real world, AND, not pinging router itself, send back to proxy
+						if(!isBelongSubnet(inet_ntoa(sender_addr), routerIP, 24) && typ!=8){
 
 							//change the destination IP back to the original source IP
 							((struct iphdr *)buf)->daddr = sourceIP_in_addr.s_addr;
@@ -605,24 +607,34 @@ EXIT_CHILD:
     	char router_port[6];
 //    	unsigned short int port_num_router;
 
-    	//receive from router, check if it's up
-    	if ((numbytes = recvfrom(sockfd, buf, MAXDATASIZE-1 , 0,
-    			&sa, &sa_len)) == -1) {
-    				perror("recvfrom");
-    				exit(1);
+    	//receive from routers, check if it's up
+		printf("waiting for routers...\n");
+    	for(i=0;i<num_routers;){
+			if ((numbytes = recvfrom(sockfd, buf, MAXDATASIZE-1 , 0,
+					&sa, &sa_len)) == -1) {
+						perror("recvfrom");
+						exit(1);
+			}
+			buf[numbytes] = '\0';
+			//handleing the "up" msg
+			p = strtok(buf, "#");
+			if(!strcmp(p, "I am up")){
+				p = strtok(NULL, "#");
+				routerID = atoi(p);
+				outfile<<"router "<<routerID<<", ";
+				p = strtok(NULL, "#");
+				outfile<<"pid: "<<atoi(p)<<", ";
+				p = strtok(NULL, "#");
+				strcpy(router_port,p);
+				outfile<<"port: "<<atoi(p)<<std::endl;
+				i++;
+
+				memcpy(&sa_router[routerID-1], &sa, sizeof sa);
+				sa_router_len[routerID-1] = sa_len;
+			}
     	}
-		buf[numbytes] = '\0';
-		p = strtok(buf, "#");
-		if(!strcmp(p, "I am up")){
-			p = strtok(NULL, "#");
-			outfile<<"router 1, "<<"pid: "<<atoi(p)<<", ";
-			p = strtok(NULL, "#");
-			strcpy(router_port,p);
-			outfile<<"port: "<<atoi(p)<<std::endl;
-		}else{
-			fprintf(stderr,"router is not up yet!\n");
-			exit(1);
-		}
+
+
 		//router is up
 
 
@@ -668,6 +680,7 @@ EXIT_CHILD:
 					if(FD_ISSET(tun_fd, &rfds)){
 						int nread;
 						nread = tunnel_reader(tun_fd, buf);
+						buf[nread]='\0';
 						struct iphdr *ip_header = (struct iphdr *)buf;
 						struct in_addr sender_addr; sender_addr.s_addr=ip_header->saddr;
 						struct in_addr dest_addr; dest_addr.s_addr=ip_header->daddr;
@@ -682,9 +695,14 @@ EXIT_CHILD:
 						ip_header->check = ip_checksum(buf,10);
 
 						//forward tunnel's packets to router
-						buf[nread]='\0';
+						/* hash the destination IP address across the routers that are provided
+						 * treat the destination IP address as a unsigned 32-bit number and take it MOD the number of routers, then add one.
+						 * (So with 4 routers, IP address 1.0.0.5 will map to 2, because 16,777,221 MOD 4 is 1.)
+						 */
+						routerID = ntohl(dest_addr.s_addr)%num_routers+1;
+
 						if ((numbytes = sendto(sockfd, buf, nread, 0,
-							&sa, sa_len)) == -1) {
+							&(sa_router[routerID-1]), sa_router_len[routerID-1])) == -1) {
 							perror("talker: sendto");
 							exit(1);
 						}

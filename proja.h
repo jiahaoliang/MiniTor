@@ -33,7 +33,7 @@
 
 #include "sample_tunnel.h"
 
-
+#define MAXNUMROUTERS 6
 #define MAXDATASIZE 2048
 #define MAX(x,y) ((x)>(y))?(x):(y)
 
